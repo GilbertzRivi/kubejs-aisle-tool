@@ -57,7 +57,7 @@ public class CopyToolItem extends Item {
                     for (int z = min.getZ(); z <= max.getZ(); z++) {
                         BlockPos current = new BlockPos(x, y, z);
                         BlockState state = level.getBlockState(current);
-                        String id = state.getBlock().getDescriptionId();
+                        String id = state.getBlock().toString().substring(state.getBlock().toString().indexOf('{') + 1, state.getBlock().toString().lastIndexOf('}'));;
                         if (!mapping.containsKey(id)) {
                             mapping.put(id, nextChar);
                             nextChar++;
@@ -104,13 +104,15 @@ public class CopyToolItem extends Item {
         BlockPos pos = context.getClickedPos();
         Player player = context.getPlayer();
         if (player != null) {
-            if (pos1 == null) {
+            if (context.isSecondaryUseActive()) {
                 pos1 = pos;
+                player.displayClientMessage(Component.literal("Corner 1 set!"), true);
             } else {
                 pos2 = pos;
+                player.displayClientMessage(Component.literal("Corner 2 set!"), true);
             }
-            player.displayClientMessage(Component.literal("Set!"), true);
         }
         return InteractionResult.SUCCESS;
     }
 }
+

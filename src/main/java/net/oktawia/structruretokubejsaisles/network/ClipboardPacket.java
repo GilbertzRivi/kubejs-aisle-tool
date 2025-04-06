@@ -112,7 +112,7 @@ public class ClipboardPacket {
             try {
                 Path path = Paths.get("packet.txt");
                 Files.writeString(path, output);
-                Minecraft.getInstance().keyboardHandler.setClipboard("Dane zapisane do: " + path.toAbsolutePath());
+                Minecraft.getInstance().keyboardHandler.setClipboard("Data saved to: " + path.toAbsolutePath());
             } catch (Exception ignored) {
             }
         } else {

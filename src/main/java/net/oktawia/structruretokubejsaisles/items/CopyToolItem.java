@@ -52,12 +52,15 @@ public class CopyToolItem extends Item {
             char nextChar = 'A';
 
             StringBuilder dataBuilder = new StringBuilder();
-            for (int y = min.getY(); y <= max.getY(); y++) {
+            for (int y = max.getY(); y >= min.getY(); y--) {
                 for (int x = min.getX(); x <= max.getX(); x++) {
                     for (int z = min.getZ(); z <= max.getZ(); z++) {
                         BlockPos current = new BlockPos(x, y, z);
                         BlockState state = level.getBlockState(current);
-                        String id = state.getBlock().toString().substring(state.getBlock().toString().indexOf('{') + 1, state.getBlock().toString().lastIndexOf('}'));;
+                        String id = state.getBlock().toString().substring(
+                                state.getBlock().toString().indexOf('{') + 1,
+                                state.getBlock().toString().lastIndexOf('}')
+                        );
                         if (!mapping.containsKey(id)) {
                             mapping.put(id, nextChar);
                             nextChar++;

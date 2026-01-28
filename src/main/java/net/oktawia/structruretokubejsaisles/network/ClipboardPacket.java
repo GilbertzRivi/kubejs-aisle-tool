@@ -1,7 +1,9 @@
 package net.oktawia.structruretokubejsaisles.network;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.components.toasts.SystemToast;
 import net.minecraft.network.FriendlyByteBuf;
+import net.minecraft.network.chat.Component;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.network.NetworkEvent;
@@ -135,6 +137,14 @@ public class ClipboardPacket {
                 Path path = Paths.get("packet.txt");
                 Files.writeString(path, outStr, StandardCharsets.UTF_8);
                 Minecraft.getInstance().keyboardHandler.setClipboard("Data saved to: " + path.toAbsolutePath());
+                Minecraft.getInstance().getToasts().addToast(
+                        new SystemToast(
+                                SystemToast.SystemToastIds.TUTORIAL_HINT,
+                                Component.literal("Copy Tool Debug"),
+                                Component.literal("Path copied to clipboard")
+                        )
+                );
+
             } catch (Exception e) {
                 // fallback
                 Minecraft.getInstance().keyboardHandler.setClipboard(outStr.substring(0, 32767));

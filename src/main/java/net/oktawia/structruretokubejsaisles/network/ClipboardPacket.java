@@ -6,6 +6,7 @@ import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.api.distmarker.OnlyIn;
 import net.minecraftforge.network.NetworkEvent;
 
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
@@ -13,8 +14,12 @@ import java.util.*;
 import java.util.function.Supplier;
 
 public class ClipboardPacket {
-    private String data;
-    private static StringBuilder packetAccumulator = new StringBuilder();
+    public static final String END_MARKER = "ThisIsTheEnd";
+
+    private final String data;
+
+    private static final StringBuilder packetAccumulator = new StringBuilder();
+
     public ClipboardPacket(String data) {
         this.data = data;
     }
@@ -28,37 +33,48 @@ public class ClipboardPacket {
     }
 
     public static void handle(ClipboardPacket packet, Supplier<NetworkEvent.Context> ctx) {
-        ctx.get().enqueueWork(() -> {
-            setClipboard(packet.data);
-        });
+        ctx.get().enqueueWork(() -> setClipboard(packet.data));
         ctx.get().setPacketHandled(true);
     }
 
     @OnlyIn(Dist.CLIENT)
-    private static void setClipboard(String data) {
-        if (!Objects.equals(data, "ThisIsTheEnd")){
-            packetAccumulator.append(data);
+    private static String jsEscape(String s) {
+        return s.replace("\\", "\\\\").replace("\"", "\\\"");
+    }
+
+    @OnlyIn(Dist.CLIENT)
+    private static void setClipboard(String incoming) {
+        if (!Objects.equals(incoming, END_MARKER)) {
+            packetAccumulator.append(incoming);
             return;
         }
 
-        String completePacket = packetAccumulator.toString();
-        packetAccumulator.delete(0, completePacket.length());
-        data = completePacket;
+        String data = packetAccumulator.toString();
+        packetAccumulator.setLength(0);
 
-        String[] lines = data.split("\n");
+        String[] lines = data.split("\n", -1);
         if (lines.length < 2) {
             Minecraft.getInstance().keyboardHandler.setClipboard(data);
             return;
         }
-        String[] dims = lines[0].split(" ");
+
+        String[] dims = lines[0].trim().split(" ");
         if (dims.length != 3) {
             Minecraft.getInstance().keyboardHandler.setClipboard(data);
             return;
         }
-        int sizeX = Integer.parseInt(dims[0]);
-        int sizeY = Integer.parseInt(dims[1]);
-        int sizeZ = Integer.parseInt(dims[2]);
 
+        int sizeX, sizeY, sizeZ;
+        try {
+            sizeX = Integer.parseInt(dims[0]);
+            sizeY = Integer.parseInt(dims[1]);
+            sizeZ = Integer.parseInt(dims[2]);
+        } catch (NumberFormatException e) {
+            Minecraft.getInstance().keyboardHandler.setClipboard(data);
+            return;
+        }
+
+        // Parse mapping lines: <char>=<blockid>
         Map<Character, String> mapping = new LinkedHashMap<>();
         int i = 1;
         while (i < lines.length && !lines[i].trim().isEmpty()) {
@@ -69,18 +85,16 @@ public class ClipboardPacket {
             }
             i++;
         }
+        while (i < lines.length && lines[i].trim().isEmpty()) i++;
 
-        while (i < lines.length && lines[i].trim().isEmpty()) {
-            i++;
-        }
-
+        // Remaining lines are encoded payload (may be huge)
         StringBuilder encodedBuilder = new StringBuilder();
         for (; i < lines.length; i++) {
             encodedBuilder.append(lines[i].trim());
         }
         String encoded = encodedBuilder.toString();
 
-        int expectedLength = sizeX * sizeZ * sizeY;
+        int expectedLength = sizeX * sizeY * sizeZ;
         if (encoded.length() < expectedLength) {
             Minecraft.getInstance().keyboardHandler.setClipboard(data);
             return;
@@ -88,35 +102,45 @@ public class ClipboardPacket {
 
         StringBuilder output = new StringBuilder();
         int levelSize = sizeX * sizeZ;
+
         for (int y = 0; y < sizeY; y++) {
             output.append(".aisle(");
             int levelStart = y * levelSize;
-            List<String> rows = new ArrayList<>();
+
+            List<String> rows = new ArrayList<>(sizeZ);
             for (int z = 0; z < sizeZ; z++) {
                 int rowStart = levelStart + z * sizeX;
                 String row = encoded.substring(rowStart, rowStart + sizeX);
-                rows.add("\"" + row + "\"");
+                rows.add("\"" + jsEscape(row) + "\"");
             }
+
             output.append(String.join(", ", rows));
             output.append(")\n");
         }
+
         output.append("\n");
+
         for (Map.Entry<Character, String> entry : mapping.entrySet()) {
             output.append(".where(\"")
-                    .append(entry.getKey())
+                    .append(jsEscape(String.valueOf(entry.getKey())))
                     .append("\", Predicates.blocks(\"")
-                    .append(entry.getValue())
+                    .append(jsEscape(entry.getValue()))
                     .append("\"))\n");
         }
-        if (output.toString().length() > 32767) {
+
+        String outStr = output.toString();
+
+        if (outStr.length() > 32767) {
             try {
                 Path path = Paths.get("packet.txt");
-                Files.writeString(path, output);
+                Files.writeString(path, outStr, StandardCharsets.UTF_8);
                 Minecraft.getInstance().keyboardHandler.setClipboard("Data saved to: " + path.toAbsolutePath());
-            } catch (Exception ignored) {
+            } catch (Exception e) {
+                // fallback
+                Minecraft.getInstance().keyboardHandler.setClipboard(outStr.substring(0, 32767));
             }
         } else {
-            Minecraft.getInstance().keyboardHandler.setClipboard(output.toString());
+            Minecraft.getInstance().keyboardHandler.setClipboard(outStr);
         }
     }
 }

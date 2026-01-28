@@ -7,6 +7,7 @@ import net.oktawia.structruretokubejsaisles.Structruretokubejsaisles;
 
 public class NetworkHandler {
     private static final String PROTOCOL_VERSION = "1";
+
     public static final SimpleChannel INSTANCE = NetworkRegistry.newSimpleChannel(
             new ResourceLocation(Structruretokubejsaisles.MODID, "main"),
             () -> PROTOCOL_VERSION,
@@ -21,6 +22,7 @@ public class NetworkHandler {
                 ClipboardPacket.class,
                 ClipboardPacket::encode,
                 ClipboardPacket::decode,
-                ClipboardPacket::handle);
+                ClipboardPacket::handle
+        );
     }
 }

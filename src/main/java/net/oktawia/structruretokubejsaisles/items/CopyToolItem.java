@@ -117,11 +117,11 @@ public class CopyToolItem extends Item {
 
                 Map<String, Character> mapping = new LinkedHashMap<>();
                 int nextIndex = 0;
-                
+
                 StringBuilder dataBuilder = new StringBuilder(sizeX * sizeY * sizeZ);
-                for (int y = min.getY(); y <= max.getY(); y++) {
-                    for (int z = min.getZ(); z <= max.getZ(); z++) {
-                        for (int x = min.getX(); x <= max.getX(); x++) {
+                for (int z = min.getZ(); z <= max.getZ(); z++) {
+                    for (int y = min.getY(); y <= max.getY(); y++) {
+                        for (int x = max.getX(); x >= min.getX(); x--) {
                             BlockPos current = new BlockPos(x, y, z);
                             BlockState state = level.getBlockState(current);
                             String id = BuiltInRegistries.BLOCK.getKey(state.getBlock()).toString();
@@ -142,7 +142,6 @@ public class CopyToolItem extends Item {
                     }
                 }
 
-
                 StringBuilder mappingBuilder = new StringBuilder();
                 for (Map.Entry<String, Character> entry : mapping.entrySet()) {
                     mappingBuilder.append(entry.getValue())
@@ -151,7 +150,7 @@ public class CopyToolItem extends Item {
                             .append("\n");
                 }
 
-                String finalData = sizeX + " " + sizeY + " " + sizeZ + "\n" +
+                String finalData = sizeX + " " + sizeZ + " " + sizeY + "\n" +
                         mappingBuilder + "\n" +
                         dataBuilder;
 

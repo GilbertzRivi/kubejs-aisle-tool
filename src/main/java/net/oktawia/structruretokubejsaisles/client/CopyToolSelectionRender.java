@@ -42,7 +42,6 @@ public class CopyToolSelectionRender {
                     Math.max(p1.getZ(), p2.getZ())
             );
 
-            // inclusive max -> AABB maxExclusive
             RenderUtil.drawSelectionBox(
                     pose, event, min, max.offset(1, 1, 1)
             );

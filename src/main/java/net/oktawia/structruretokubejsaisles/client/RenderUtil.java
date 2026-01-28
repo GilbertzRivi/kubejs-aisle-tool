@@ -32,7 +32,6 @@ public class RenderUtil {
                 .bufferSource()
                 .getBuffer(RenderType.lines());
 
-        // Green wireframe box
         LevelRenderer.renderLineBox(
                 pose,
                 buffer,

@@ -18,6 +18,8 @@ import java.util.function.Supplier;
 public class ClipboardPacket {
     public static final String END_MARKER = "ThisIsTheEnd";
 
+    private static final boolean AISLE_TOP_FIRST = true;
+
     private final String data;
 
     private static final StringBuilder packetAccumulator = new StringBuilder();
@@ -76,7 +78,6 @@ public class ClipboardPacket {
             return;
         }
 
-        // Parse mapping lines: <char>=<blockid>
         Map<Character, String> mapping = new LinkedHashMap<>();
         int i = 1;
         while (i < lines.length && !lines[i].trim().isEmpty()) {
@@ -89,7 +90,6 @@ public class ClipboardPacket {
         }
         while (i < lines.length && lines[i].trim().isEmpty()) i++;
 
-        // Remaining lines are encoded payload (may be huge)
         StringBuilder encodedBuilder = new StringBuilder();
         for (; i < lines.length; i++) {
             encodedBuilder.append(lines[i].trim());
@@ -105,19 +105,14 @@ public class ClipboardPacket {
         StringBuilder output = new StringBuilder();
         int levelSize = sizeX * sizeZ;
 
-        for (int y = 0; y < sizeY; y++) {
-            output.append(".aisle(");
-            int levelStart = y * levelSize;
-
-            List<String> rows = new ArrayList<>(sizeZ);
-            for (int z = 0; z < sizeZ; z++) {
-                int rowStart = levelStart + z * sizeX;
-                String row = encoded.substring(rowStart, rowStart + sizeX);
-                rows.add("\"" + jsEscape(row) + "\"");
+        if (AISLE_TOP_FIRST) {
+            for (int y = sizeY - 1; y >= 0; y--) {
+                appendAisle(output, encoded, sizeX, sizeZ, levelSize, y);
             }
-
-            output.append(String.join(", ", rows));
-            output.append(")\n");
+        } else {
+            for (int y = 0; y < sizeY; y++) {
+                appendAisle(output, encoded, sizeX, sizeZ, levelSize, y);
+            }
         }
 
         output.append("\n");
@@ -144,13 +139,33 @@ public class ClipboardPacket {
                                 Component.literal("Path copied to clipboard")
                         )
                 );
-
             } catch (Exception e) {
-                // fallback
                 Minecraft.getInstance().keyboardHandler.setClipboard(outStr.substring(0, 32767));
             }
         } else {
             Minecraft.getInstance().keyboardHandler.setClipboard(outStr);
         }
+    }
+
+    @OnlyIn(Dist.CLIENT)
+    private static void appendAisle(StringBuilder output,
+                                    String encoded,
+                                    int sizeX,
+                                    int sizeZ,
+                                    int levelSize,
+                                    int yIndex) {
+
+        output.append(".aisle(");
+        int levelStart = yIndex * levelSize;
+
+        List<String> rows = new ArrayList<>(sizeZ);
+        for (int z = 0; z < sizeZ; z++) {
+            int rowStart = levelStart + z * sizeX;
+            String row = encoded.substring(rowStart, rowStart + sizeX);
+            rows.add("\"" + jsEscape(row) + "\"");
+        }
+
+        output.append(String.join(", ", rows));
+        output.append(")\n");
     }
 }

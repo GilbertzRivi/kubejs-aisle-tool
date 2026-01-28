@@ -36,8 +36,6 @@ public class CopyToolItem extends Item {
     private static final String NBT_POS1 = "copytool_pos1";
     private static final String NBT_POS2 = "copytool_pos2";
 
-    // Big palette: a-z A-Z 0-9 and lots of symbols.
-    // Excludes: '=' (mapping delimiter), '"' and '\' (JS escaping hazards), whitespace/newlines.
     private static final char[] ALPHABET =
             ("abcdefghijklmnopqrstuvwxyz" +
              "ABCDEFGHIJKLMNOPQRSTUVWXYZ" +
@@ -121,7 +119,7 @@ public class CopyToolItem extends Item {
                 int nextIndex = 0;
                 
                 StringBuilder dataBuilder = new StringBuilder(sizeX * sizeY * sizeZ);
-                for (int y = max.getY(); y >= min.getY(); y--) {
+                for (int y = min.getY(); y <= max.getY(); y++) {
                     for (int z = min.getZ(); z <= max.getZ(); z++) {
                         for (int x = min.getX(); x <= max.getX(); x++) {
                             BlockPos current = new BlockPos(x, y, z);
@@ -144,9 +142,9 @@ public class CopyToolItem extends Item {
                     }
                 }
 
+
                 StringBuilder mappingBuilder = new StringBuilder();
                 for (Map.Entry<String, Character> entry : mapping.entrySet()) {
-                    // NOTE: '=' cannot appear as a symbol because it is the delimiter.
                     mappingBuilder.append(entry.getValue())
                             .append("=")
                             .append(entry.getKey())
@@ -201,14 +199,12 @@ public class CopyToolItem extends Item {
         ItemStack stack = context.getItemInHand();
         BlockPos pos = context.getClickedPos();
 
-        // Write NBT on BOTH sides so the client can render immediately
         if (context.isSecondaryUseActive()) {
             writePos(stack, NBT_POS1, pos);
         } else {
             writePos(stack, NBT_POS2, pos);
         }
 
-        // Only send chat messages from the server (prevents duplicates)
         if (!context.getLevel().isClientSide()) {
             Component msg = Component.literal(
                     context.isSecondaryUseActive()

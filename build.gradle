@@ -18,6 +18,7 @@ plugins {
     id 'maven-publish'
     id 'net.minecraftforge.gradle' version '[6.0,6.2)'
     id 'org.parchmentmc.librarian.forgegradle' version '1.+'
+    id 'hc'
 }
 apply plugin: 'net.minecraftforge.gradle'
 apply plugin: 'org.spongepowered.mixin'
@@ -217,4 +218,29 @@ tasks.named('jar', Jar).configure {
 
 tasks.withType(JavaCompile).configureEach {
     options.encoding = 'UTF-8' // Use the UTF-8 charset for Java compilation
+}
+
+// --- Hot Chocolate toolchain -------------------------------------------------------------
+// Compiles every .hc file in src/main/hc/ (a separate, sibling project at ../../HotChocolate --
+// an experimental Rust-inspired language that compiles straight to JVM bytecode via ASM) as ONE
+// directory-mode compile via the `hc` Gradle plugin's `sourceDir` (an included build from that
+// same sibling repo, see settings.gradle's `pluginManagement.includeBuild`), and bundles the
+// resulting .class files into this mod's jar. Each file still declares its own real `module
+// net.oktawia.structruretokubejsaisles.X;` line (so its output nests into the matching
+// net/oktawia/.../ subdirectory ordinary Java `import` + static calls reach it through --
+// Forge's JPMS-based mod loading silently excludes unnamed-package classes entirely, so this
+// only works because of that module declaration), but there's no more per-file compile ordering
+// or `extern class Foo = "already.compiled.Foo" { ... }` bridging between these files' own
+// declarations -- directory mode merges them into one shared, `extern`-free namespace (see
+// HotChocolate's README, "Multi-file projects"), and McBindings.hc holds every *external*
+// Minecraft/Forge `extern class` declaration these files need, once each, instead of the
+// hand-duplicated (and in a couple of real cases, inconsistently wrong -- see McBindings.hc's
+// own doc comment) copies that used to live in every file that happened to need them. File names
+// are TitleCase (matching the class each one compiles to) rather than this project's usual
+// lowercase Java convention -- deliberately, since these files are the direct source of an
+// importable class, same reasoning as Java's own "file name matches the class" rule; example/
+// demo .hc scripts (no `module`, not imported by anything) stay lowercase.
+hotChocolate {
+    compilerHome = file("$rootDir/../../HotChocolate/build/install/hotchocolate")
+    sourceDir file('src/main/hc')
 }

@@ -1,0 +1,260 @@
+// The Java and Minecraft types the Copy Tool code uses. Every member below is checked against the real 1.21.1 classes when
+// the project compiles (names, parameter types, interface-vs-class, field types), so a mismatch is a build error.
+
+extern class JObject = "java.lang.Object" {}
+
+extern class JMath = "java.lang.Math" {
+    static fn min(a: Int, b: Int) -> Int;
+    static fn max(a: Int, b: Int) -> Int;
+}
+
+extern class JStringBuilder = "java.lang.StringBuilder" {
+    fn new() -> Self;
+    fn append(&self, text: String) -> JStringBuilder;
+    fn toString(&self) -> String;
+    fn length(&self) -> Int;
+}
+
+extern class JStr = "java.lang.String" {
+    fn split(&self, regex: String, limit: Int) -> [String];
+    static fn valueOf(i: Int) -> String;
+}
+
+extern class JInteger = "java.lang.Integer" {
+    static fn parseInt(s: String) -> Int;
+}
+
+extern class JNumberFormatException = "java.lang.NumberFormatException" {}
+extern class JException = "java.lang.Exception" {}
+
+// --- java.util, for the block-to-letter map (its get/put/containsKey erase to Object) ---
+
+extern class LinkedHashMap = "java.util.LinkedHashMap" {
+    fn new() -> Self;
+    fn put(&self, key: JObject, value: JObject) -> JObject;
+    fn get(&self, key: JObject) -> JObject;
+    fn containsKey(&self, key: JObject) -> Bool;
+    fn entrySet(&self) -> JSet;
+}
+
+extern class JSet = "java.util.Set" interface {
+    fn iterator(&self) -> JIterator;
+}
+
+extern class JIterator = "java.util.Iterator" interface {
+    fn hasNext(&self) -> Bool;
+    fn next(&self) -> JObject;
+}
+
+extern class JEntry = "java.util.Map$Entry" interface {
+    fn getKey(&self) -> JObject;
+    fn getValue(&self) -> JObject;
+}
+
+extern class JList = "java.util.List" interface {
+    fn add(&self, item: JObject) -> Bool;
+}
+
+// --- files (for selections too big for the clipboard) ---
+
+extern class JPath = "java.nio.file.Path" interface {
+    fn toAbsolutePath(&self) -> JPath;
+    fn toString(&self) -> String;
+}
+
+extern class JPaths = "java.nio.file.Paths" {
+    static fn get(first: String, more: [String]) -> JPath;
+}
+
+extern class JCharSequence = "java.lang.CharSequence" interface {}
+extern class JOpenOption = "java.nio.file.OpenOption" interface {}
+
+extern class JStandardOpenOption = "java.nio.file.StandardOpenOption" {
+    static CREATE: JStandardOpenOption;
+    static TRUNCATE_EXISTING: JStandardOpenOption;
+    static WRITE: JStandardOpenOption;
+}
+
+extern class JFiles = "java.nio.file.Files" {
+    static fn writeString(path: JPath, content: JCharSequence, options: [JOpenOption]) -> JPath;
+}
+
+// --- Minecraft ---
+
+extern class Component = "net.minecraft.network.chat.Component" interface {
+    static fn literal(text: String) -> MutableComponent;
+    static fn translatable(key: String) -> MutableComponent;
+}
+
+extern class MutableComponent = "net.minecraft.network.chat.MutableComponent" {}
+
+extern class ResourceLocation = "net.minecraft.resources.ResourceLocation" {
+    fn toString(&self) -> String;
+}
+
+extern class DefaultedRegistry = "net.minecraft.core.DefaultedRegistry" interface {
+    fn getKey(&self, value: JObject) -> ResourceLocation;
+}
+
+extern class BuiltInRegistries = "net.minecraft.core.registries.BuiltInRegistries" {
+    static BLOCK: DefaultedRegistry;
+}
+
+extern class BlockPos = "net.minecraft.core.BlockPos" {
+    fn new(x: Int, y: Int, z: Int) -> Self;
+    fn getX(&self) -> Int;
+    fn getY(&self) -> Int;
+    fn getZ(&self) -> Int;
+    fn offset(&self, dx: Int, dy: Int, dz: Int) -> BlockPos;
+}
+
+extern class Block = "net.minecraft.world.level.block.Block" {}
+
+extern class BlockState = "net.minecraft.world.level.block.state.BlockState" {
+    fn getBlock(&self) -> Block;
+}
+
+// `isClientSide` is a public field of Level (there is no getter worth calling here).
+extern class Level = "net.minecraft.world.level.Level" {
+    isClientSide: Bool;
+    fn getBlockState(&self, pos: BlockPos) -> BlockState;
+}
+
+extern class InteractionHand = "net.minecraft.world.InteractionHand" {}
+
+extern class ItemProperties = "net.minecraft.world.item.Item$Properties" {}
+
+extern class Item = "net.minecraft.world.item.Item" {
+    fn new(props: ItemProperties) -> Self;
+}
+
+extern class ItemStack = "net.minecraft.world.item.ItemStack" {
+    fn getItem(&self) -> Item;
+}
+
+extern class TooltipFlag = "net.minecraft.world.item.TooltipFlag" interface {}
+extern class TooltipContext = "net.minecraft.world.item.Item$TooltipContext" interface {}
+
+extern class Player = "net.minecraft.world.entity.player.Player" {
+    fn getItemInHand(&self, hand: InteractionHand) -> ItemStack;
+    fn getMainHandItem(&self) -> ItemStack;
+    fn displayClientMessage(&self, message: Component, actionBar: Bool);
+}
+
+extern class LocalPlayer = "net.minecraft.client.player.LocalPlayer" {
+    fn getMainHandItem(&self) -> ItemStack;
+}
+
+extern class InteractionResultHolder = "net.minecraft.world.InteractionResultHolder" {
+    static fn success(obj: JObject) -> InteractionResultHolder;
+    static fn fail(obj: JObject) -> InteractionResultHolder;
+}
+
+extern class InteractionResult = "net.minecraft.world.InteractionResult" {
+    static SUCCESS: InteractionResult;
+    static PASS: InteractionResult;
+}
+
+extern class UseOnContext = "net.minecraft.world.item.context.UseOnContext" {
+    fn getPlayer(&self) -> Player?;
+    fn getItemInHand(&self) -> ItemStack;
+    fn getClickedPos(&self) -> BlockPos;
+    fn isSecondaryUseActive(&self) -> Bool;
+    fn getLevel(&self) -> Level;
+}
+
+// --- the Java side of this mod ---
+
+extern class CopyToolData = "net.oktawia.structuretokubejsaisles.CopyToolData" {
+    static fn get(stack: &ItemStack, corner: Int) -> BlockPos?;
+    static fn set(stack: &ItemStack, corner: Int, pos: &BlockPos);
+    static fn clear(stack: &ItemStack, corner: Int);
+}
+
+extern class ClipboardSender = "net.oktawia.structuretokubejsaisles.ClipboardSender" {
+    static fn send(player: &Player, data: String);
+}
+
+// --- client ---
+
+extern class Minecraft = "net.minecraft.client.Minecraft" {
+    static fn getInstance() -> Minecraft;
+    fn getWindow(&self) -> Window;
+    fn renderBuffers(&self) -> RenderBuffers;
+    fn getToasts(&self) -> ToastComponent;
+    player: LocalPlayer?;
+    font: Font;
+    gameRenderer: GameRenderer;
+    keyboardHandler: KeyboardHandler;
+}
+
+extern class Window = "com.mojang.blaze3d.platform.Window" {
+    fn getGuiScaledWidth(&self) -> Int;
+    fn getGuiScaledHeight(&self) -> Int;
+}
+
+extern class Font = "net.minecraft.client.gui.Font" {
+    fn width(&self, text: String) -> Int;
+}
+
+extern class GuiGraphics = "net.minecraft.client.gui.GuiGraphics" {
+    fn drawString(&self, font: Font, text: String, x: Int, y: Int, color: Int, dropShadow: Bool) -> Int;
+}
+
+extern class KeyboardHandler = "net.minecraft.client.KeyboardHandler" {
+    fn setClipboard(&self, text: String);
+}
+
+extern class Toast = "net.minecraft.client.gui.components.toasts.Toast" interface {}
+
+extern class ToastComponent = "net.minecraft.client.gui.components.toasts.ToastComponent" {
+    fn addToast(&self, toast: Toast);
+}
+
+extern class SystemToastId = "net.minecraft.client.gui.components.toasts.SystemToast$SystemToastId" {
+    static PERIODIC_NOTIFICATION: SystemToastId;
+}
+
+extern class SystemToast = "net.minecraft.client.gui.components.toasts.SystemToast" {
+    fn new(id: SystemToastId, title: Component, message: Component) -> Self;
+}
+
+extern class PoseStack = "com.mojang.blaze3d.vertex.PoseStack" {}
+
+extern class VertexConsumer = "com.mojang.blaze3d.vertex.VertexConsumer" interface {}
+
+extern class Vec3 = "net.minecraft.world.phys.Vec3" {
+    x: Double;
+    y: Double;
+    z: Double;
+}
+
+extern class Camera = "net.minecraft.client.Camera" {
+    fn getPosition(&self) -> Vec3;
+}
+
+extern class GameRenderer = "net.minecraft.client.renderer.GameRenderer" {
+    fn getMainCamera(&self) -> Camera;
+}
+
+extern class AABB = "net.minecraft.world.phys.AABB" {
+    fn new(x1: Double, y1: Double, z1: Double, x2: Double, y2: Double, z2: Double) -> Self;
+    fn move(&self, dx: Double, dy: Double, dz: Double) -> AABB;
+}
+
+extern class RenderType = "net.minecraft.client.renderer.RenderType" {
+    static fn lines() -> RenderType;
+}
+
+extern class BufferSource = "net.minecraft.client.renderer.MultiBufferSource$BufferSource" {
+    fn getBuffer(&self, type: RenderType) -> VertexConsumer;
+    fn endBatch(&self, type: RenderType);
+}
+
+extern class RenderBuffers = "net.minecraft.client.renderer.RenderBuffers" {
+    fn bufferSource(&self) -> BufferSource;
+}
+
+extern class LevelRenderer = "net.minecraft.client.renderer.LevelRenderer" {
+    static fn renderLineBox(pose: &PoseStack, buffer: &VertexConsumer, box: &AABB, r: Float, g: Float, b: Float, a: Float);
+}

@@ -1,0 +1,146 @@
+// The Copy Tool: sneak + right click a block for corner 1, right click a block for corner 2, right click air to copy.
+
+// Letters the selection's block ids are mapped to (91 of them; none is '=' or a quote, which the clipboard format uses).
+static ALPHABET: String = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'()*+,-./:;<>?@[]^_`\{|\}~";
+
+// What the server can send in one packet (a clientbound payload may not exceed 1 MiB; the Java payload codec caps it here).
+static MAX_DATA_CHARS: Int = 1000000;
+
+pub struct CopyToolItem extends Item {}
+
+impl CopyToolItem {
+    override fn use(&self, level: &Level, player: &Player, hand: InteractionHand) -> InteractionResultHolder {
+        return use_item(level, player, hand);
+    }
+
+    override fn useOn(&self, context: &UseOnContext) -> InteractionResult {
+        let player = context.getPlayer();
+        if player == null {
+            return InteractionResult::PASS;
+        }
+        return use_on(context, &player);
+    }
+
+    override fn appendHoverText(&self, stack: &ItemStack, context: &TooltipContext, tooltip: &JList, flag: &TooltipFlag) {
+        tooltip.add(Component::literal("Shift right click a block to set the first corner and right click a block for the second.") as JObject);
+        tooltip.add(Component::literal("Then right click on air to copy the selection to the clipboard as KubeJS slices.") as JObject);
+        tooltip.add(Component::literal("A selection too big for the clipboard is written to packet.txt and the file path is copied instead.") as JObject);
+    }
+}
+
+fn message(player: &Player, text: String) {
+    player.displayClientMessage(Component::literal(text) as Component, true);
+}
+
+// The text the server sends: "<size_x> <size_z> <size_y>", one `letter=block id` line per distinct block, a blank line, then one
+// letter per block (z outermost, then y, then x from the far side). `decode_clipboard` turns that into KubeJS. Returns "" when the
+// selection has more distinct blocks than there are letters.
+pub fn scan_region(level: &Level, pos1: &BlockPos, pos2: &BlockPos) -> String {
+    let min_x = JMath::min(pos1.getX(), pos2.getX());
+    let min_y = JMath::min(pos1.getY(), pos2.getY());
+    let min_z = JMath::min(pos1.getZ(), pos2.getZ());
+    let max_x = JMath::max(pos1.getX(), pos2.getX());
+    let max_y = JMath::max(pos1.getY(), pos2.getY());
+    let max_z = JMath::max(pos1.getZ(), pos2.getZ());
+    let size_x = max_x - min_x + 1;
+    let size_y = max_y - min_y + 1;
+    let size_z = max_z - min_z + 1;
+
+    let mapping = LinkedHashMap::new();
+    var next_index = 0;
+    let data = JStringBuilder::new();
+
+    for z in min_z..max_z + 1 {
+        for y in min_y..max_y + 1 {
+            for x_inv in 0..size_x {
+                let x = max_x - x_inv;
+                let block = level.getBlockState(BlockPos::new(x, y, z)).getBlock();
+                let id = BuiltInRegistries::BLOCK.getKey(block as JObject).toString();
+                var letter = "";
+                if mapping.containsKey(id as JObject) {
+                    letter = mapping.get(id as JObject) as String;
+                } else {
+                    if next_index >= ALPHABET.length() {
+                        return "";
+                    }
+                    letter = ALPHABET.substring(next_index, next_index + 1);
+                    mapping.put(id as JObject, letter as JObject);
+                    next_index = next_index + 1;
+                }
+                data.append(letter);
+            }
+        }
+    }
+
+    let mapping_lines = JStringBuilder::new();
+    let it = mapping.entrySet().iterator();
+    while it.hasNext() {
+        let entry = it.next() as JEntry;
+        mapping_lines.append(entry.getValue() as String);
+        mapping_lines.append("=");
+        mapping_lines.append(entry.getKey() as String);
+        mapping_lines.append("\n");
+    }
+
+    let out = JStringBuilder::new();
+    out.append(JStr::valueOf(size_x));
+    out.append(" ");
+    out.append(JStr::valueOf(size_z));
+    out.append(" ");
+    out.append(JStr::valueOf(size_y));
+    out.append("\n");
+    out.append(mapping_lines.toString());
+    out.append("\n");
+    out.append(data.toString());
+    return out.toString();
+}
+
+// Scans the selection and sends it to the player; clears both corners when it worked.
+fn copy_selection(level: &Level, player: &Player, stack: &ItemStack, pos1: &BlockPos, pos2: &BlockPos) {
+    let data = scan_region(level, pos1, pos2);
+    if data == "" {
+        message(player, "Too many different blocks in the selection (the limit is 91).");
+    } else if data.length() > MAX_DATA_CHARS {
+        message(player, "The selection is too big to send to you (about a million blocks at most).");
+    } else {
+        ClipboardSender::send(player, data);
+        message(player, "Copied blocks.");
+        CopyToolData::clear(stack, 1);
+        CopyToolData::clear(stack, 2);
+    }
+}
+
+pub fn use_item(level: &Level, player: &Player, hand: InteractionHand) -> InteractionResultHolder {
+    let stack = player.getItemInHand(hand);
+
+    if !level.isClientSide {
+        let pos1 = CopyToolData::get(&stack, 1);
+        let pos2 = CopyToolData::get(&stack, 2);
+        if pos1 != null {
+            if pos2 != null {
+                copy_selection(level, player, &stack, &pos1, &pos2);
+            } else {
+                message(player, "Set both corners first.");
+            }
+        } else {
+            message(player, "Set both corners first.");
+        }
+    }
+
+    return InteractionResultHolder::success(stack as JObject);
+}
+
+pub fn use_on(context: &UseOnContext, player: &Player) -> InteractionResult {
+    let stack = context.getItemInHand();
+    let pos = context.getClickedPos();
+    var corner = 2;
+    if context.isSecondaryUseActive() {
+        corner = 1;
+    }
+    CopyToolData::set(&stack, corner, &pos);
+
+    if !context.getLevel().isClientSide {
+        message(player, "Corner {corner} set!");
+    }
+    return InteractionResult::SUCCESS;
+}

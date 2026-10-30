@@ -1,0 +1,100 @@
+// Client drawing: the info text above the hotbar and the selection box in the world.
+
+fn holding_copy_tool(player: &LocalPlayer) -> Bool {
+    return player.getMainHandItem().getItem() is CopyToolItem;
+}
+
+pub fn render_hud(gg: GuiGraphics) {
+    let mc = Minecraft::getInstance();
+    let player = mc.player;
+    if player == null {
+        return;
+    }
+    if !holding_copy_tool(&player) {
+        return;
+    }
+
+    let stack = player.getMainHandItem();
+    let p1 = CopyToolData::get(&stack, 1);
+    let p2 = CopyToolData::get(&stack, 2);
+
+    let screen_w = mc.getWindow().getGuiScaledWidth();
+    let screen_h = mc.getWindow().getGuiScaledHeight();
+    let x = screen_w / 2 - 90;
+    let y = screen_h - 60;
+
+    var any_corner = false;
+    if p1 != null { any_corner = true; }
+    if p2 != null { any_corner = true; }
+    if !any_corner {
+        let line1 = "Copy Tool: set the corners";
+        let line2 = "(Sneak + Right Click = Corner 1)";
+        let center_x = screen_w / 2;
+        gg.drawString(mc.font, line1, center_x - mc.font.width(line1) / 2, y, 0xFFFFFF, true);
+        gg.drawString(mc.font, line2, center_x - mc.font.width(line2) / 2, y + 10, 0xAAAAAA, true);
+        return;
+    }
+
+    var c1 = "Corner 1: -";
+    if p1 != null {
+        c1 = "Corner 1: {p1.getX()} {p1.getY()} {p1.getZ()}";
+    }
+    var c2 = "Corner 2: -";
+    if p2 != null {
+        c2 = "Corner 2: {p2.getX()} {p2.getY()} {p2.getZ()}";
+    }
+    gg.drawString(mc.font, c1, x, y, 0xFFFFFF, true);
+    gg.drawString(mc.font, c2, x, y + 10, 0xFFFFFF, true);
+
+    if p1 != null {
+        if p2 != null {
+            let size_x = JMath::max(p1.getX(), p2.getX()) - JMath::min(p1.getX(), p2.getX()) + 1;
+            let size_y = JMath::max(p1.getY(), p2.getY()) - JMath::min(p1.getY(), p2.getY()) + 1;
+            let size_z = JMath::max(p1.getZ(), p2.getZ()) - JMath::min(p1.getZ(), p2.getZ()) + 1;
+            let blocks = (size_x as Long) * (size_y as Long) * (size_z as Long);
+            gg.drawString(mc.font, "Size: {size_x}x{size_y}x{size_z}   Blocks: {blocks}", x, y + 22, 0xFFFFFF, true);
+        }
+    }
+}
+
+fn draw_selection_box(pose: &PoseStack, min: &BlockPos, max_exclusive: &BlockPos) {
+    let mc = Minecraft::getInstance();
+    let cam = mc.gameRenderer.getMainCamera().getPosition();
+
+    let box = AABB::new(
+        min.getX() as Double, min.getY() as Double, min.getZ() as Double,
+        max_exclusive.getX() as Double, max_exclusive.getY() as Double, max_exclusive.getZ() as Double
+    ).move(0.0 - cam.x, 0.0 - cam.y, 0.0 - cam.z);
+
+    let source = mc.renderBuffers().bufferSource();
+    let buffer = source.getBuffer(RenderType::lines());
+    LevelRenderer::renderLineBox(pose, &buffer, &box, 0.0f, 1.0f, 0.0f, 1.0f);
+    source.endBatch(RenderType::lines());
+}
+
+pub fn render_selection(pose: PoseStack) {
+    let mc = Minecraft::getInstance();
+    let player = mc.player;
+    if player == null {
+        return;
+    }
+    if !holding_copy_tool(&player) {
+        return;
+    }
+
+    let stack = player.getMainHandItem();
+    let p1 = CopyToolData::get(&stack, 1);
+    let p2 = CopyToolData::get(&stack, 2);
+
+    if p1 != null {
+        if p2 != null {
+            let low = BlockPos::new(JMath::min(p1.getX(), p2.getX()), JMath::min(p1.getY(), p2.getY()), JMath::min(p1.getZ(), p2.getZ()));
+            let high = BlockPos::new(JMath::max(p1.getX(), p2.getX()), JMath::max(p1.getY(), p2.getY()), JMath::max(p1.getZ(), p2.getZ()));
+            draw_selection_box(&pose, &low, &high.offset(1, 1, 1));
+        } else {
+            draw_selection_box(&pose, &p1, &p1.offset(1, 1, 1));
+        }
+    } else if p2 != null {
+        draw_selection_box(&pose, &p2, &p2.offset(1, 1, 1));
+    }
+}

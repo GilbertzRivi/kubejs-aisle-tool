@@ -1,4 +1,12 @@
 {
   "item.structuretokubejsaisles.copy_tool": "Copy Tool",
-  "creativetab.structruretokubejsaisles_tab": "Structure To KubeJs Aisles"
+  "creativetab.structruretokubejsaisles_tab": "Structure To KubeJs Aisles",
+  "key.categories.structuretokubejsaisles": "Copy Tool",
+  "key.structuretokubejsaisles.mode": "Switch corners / controller",
+  "key.structuretokubejsaisles.clear": "Clear the selection",
+  "structuretokubejsaisles.configuration.title": "Copy Tool",
+  "structuretokubejsaisles.configuration.letterCase": "Letter case",
+  "structuretokubejsaisles.configuration.air": "Air",
+  "structuretokubejsaisles.configuration.gtmPartsAsAbilities": "Hatches and buses as abilities",
+  "structuretokubejsaisles.configuration.outputStyle": "Output style"
 }

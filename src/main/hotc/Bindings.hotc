@@ -35,6 +35,7 @@ extern class LinkedHashMap = "java.util.LinkedHashMap" {
     fn get(&self, key: JObject) -> JObject;
     fn containsKey(&self, key: JObject) -> Bool;
     fn entrySet(&self) -> JSet;
+    fn size(&self) -> Int;
 }
 
 extern class JSet = "java.util.Set" interface {
@@ -166,9 +167,24 @@ extern class UseOnContext = "net.minecraft.world.item.context.UseOnContext" {
 // --- the Java side of this mod ---
 
 extern class CopyToolData = "net.oktawia.structuretokubejsaisles.CopyToolData" {
-    static fn get(stack: &ItemStack, corner: Int) -> BlockPos?;
-    static fn set(stack: &ItemStack, corner: Int, pos: &BlockPos);
-    static fn clear(stack: &ItemStack, corner: Int);
+    // `which`: 1 = corner 1, 2 = corner 2, 3 = the controller
+    static fn get(stack: &ItemStack, which: Int) -> BlockPos?;
+    static fn set(stack: &ItemStack, which: Int, pos: &BlockPos);
+    static fn clear(stack: &ItemStack, which: Int);
+    static fn controllerMode(stack: &ItemStack) -> Bool;
+}
+
+extern class ControllerFrame = "net.oktawia.structuretokubejsaisles.ControllerFrame" {
+    static fn defaultFrame() -> [Int];
+    static fn frame(level: &Level, controller: &BlockPos) -> [Int];
+}
+
+// The client-side settings that shape the KubeJS text (see ClientConfig.java).
+extern class ClientConfig = "net.oktawia.structuretokubejsaisles.ClientConfig" {
+    static fn uppercaseFirst() -> Bool;
+    static fn airMode() -> Int;
+    static fn partsAsAbilities() -> Bool;
+    static fn fullPattern() -> Bool;
 }
 
 extern class ClipboardSender = "net.oktawia.structuretokubejsaisles.ClipboardSender" {
@@ -183,9 +199,23 @@ extern class Minecraft = "net.minecraft.client.Minecraft" {
     fn renderBuffers(&self) -> RenderBuffers;
     fn getToasts(&self) -> ToastComponent;
     player: LocalPlayer?;
+    level: ClientLevel?;
     font: Font;
     gameRenderer: GameRenderer;
     keyboardHandler: KeyboardHandler;
+}
+
+extern class ClientLevel = "net.minecraft.client.multiplayer.ClientLevel" {
+    fn getBlockState(&self, pos: BlockPos) -> BlockState;
+}
+
+extern class JSystem = "java.lang.System" {
+    static fn currentTimeMillis() -> Long;
+}
+
+extern class RenderSystem = "com.mojang.blaze3d.systems.RenderSystem" {
+    static fn disableDepthTest();
+    static fn enableDepthTest();
 }
 
 extern class Window = "com.mojang.blaze3d.platform.Window" {

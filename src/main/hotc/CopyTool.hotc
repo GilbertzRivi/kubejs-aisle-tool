@@ -1,6 +1,10 @@
-// The Copy Tool: sneak + right click a block for corner 1, right click a block for corner 2, right click air to copy.
+// The Copy Tool.
+//   * Right click a block: corner 2.   Sneak + right click a block: corner 1.
+//   * Press the mode key ([ by default) to make a right click mark the CONTROLLER instead (sneak + click unmarks it).
+//   * Right click air: copy the selection to the clipboard as KubeJS for GTM 8.   The clear key (]) forgets everything.
 
-// Letters the selection's block ids are mapped to (91 of them; none is '=' or a quote, which the clipboard format uses).
+// The server's own alphabet for "the n-th distinct block" (91 characters; none is '=' or a quote). The client re-letters the
+// blocks to its own taste, so this order never reaches the player.
 static ALPHABET: String = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!#$%&'()*+,-./:;<>?@[]^_`\{|\}~";
 
 // What the server can send in one packet (a clientbound payload may not exceed 1 MiB; the Java payload codec caps it here).
@@ -23,7 +27,8 @@ impl CopyToolItem {
 
     override fn appendHoverText(&self, stack: &ItemStack, context: &TooltipContext, tooltip: &JList, flag: &TooltipFlag) {
         tooltip.add(Component::literal("Shift right click a block to set the first corner and right click a block for the second.") as JObject);
-        tooltip.add(Component::literal("Then right click on air to copy the selection to the clipboard as KubeJS slices.") as JObject);
+        tooltip.add(Component::literal("Press [ to switch to marking the multiblock controller; right click air to copy.") as JObject);
+        tooltip.add(Component::literal("Press ] to clear the selection.") as JObject);
         tooltip.add(Component::literal("A selection too big for the clipboard is written to packet.txt and the file path is copied instead.") as JObject);
     }
 }
@@ -32,10 +37,19 @@ fn message(player: &Player, text: String) {
     player.displayClientMessage(Component::literal(text) as Component, true);
 }
 
-// The text the server sends: "<size_x> <size_z> <size_y>", one `letter=block id` line per distinct block, a blank line, then one
-// letter per block (z outermost, then y, then x from the far side). `decode_clipboard` turns that into KubeJS. Returns "" when the
-// selection has more distinct blocks than there are letters.
-pub fn scan_region(level: &Level, pos1: &BlockPos, pos2: &BlockPos) -> String {
+fn inside(pos: &BlockPos, low: &BlockPos, high: &BlockPos) -> Bool {
+    if pos.getX() < low.getX() || pos.getX() > high.getX() { return false; }
+    if pos.getY() < low.getY() || pos.getY() > high.getY() { return false; }
+    if pos.getZ() < low.getZ() || pos.getZ() > high.getZ() { return false; }
+    return true;
+}
+
+// The text the server sends. Line 1: "v2 <slices> <rows> <chars>". Then one `letter=block id` line per distinct block (a
+// letter from ALPHABET, in order of first appearance), a blank line, and one character per block: slice by slice, row by row,
+// char by char, in the directions of `frame` (see ControllerFrame.java) -- exactly the order GTM 8's pattern builder reads
+// them -- with `=` standing for the controller. `decode_clipboard` turns that into KubeJS. Returns "" when the selection has more
+// distinct blocks than ALPHABET has letters.
+pub fn scan_region(level: &Level, pos1: &BlockPos, pos2: &BlockPos, frame: &[Int], has_controller: Bool, controller: &BlockPos) -> String {
     let min_x = JMath::min(pos1.getX(), pos2.getX());
     let min_y = JMath::min(pos1.getY(), pos2.getY());
     let min_z = JMath::min(pos1.getZ(), pos2.getZ());
@@ -46,28 +60,57 @@ pub fn scan_region(level: &Level, pos1: &BlockPos, pos2: &BlockPos) -> String {
     let size_y = max_y - min_y + 1;
     let size_z = max_z - min_z + 1;
 
+    // frame = the unit step of a slice, of a row and of a char, as (x, y, z) each; every axis is used by exactly one of them
+    let slice_x = frame[0];
+    let slice_y = frame[1];
+    let slice_z = frame[2];
+    let row_x = frame[3];
+    let row_y = frame[4];
+    let row_z = frame[5];
+    let char_x = frame[6];
+    let char_y = frame[7];
+    let char_z = frame[8];
+
+    let slices = slice_x * slice_x * size_x + slice_y * slice_y * size_y + slice_z * slice_z * size_z;
+    let rows = row_x * row_x * size_x + row_y * row_y * size_y + row_z * row_z * size_z;
+    let chars = char_x * char_x * size_x + char_y * char_y * size_y + char_z * char_z * size_z;
+
+    // the first cell sits at the low end of an axis that is walked upwards and at the high end of one walked downwards
+    var origin_x = min_x;
+    if slice_x + row_x + char_x < 0 { origin_x = max_x; }
+    var origin_y = min_y;
+    if slice_y + row_y + char_y < 0 { origin_y = max_y; }
+    var origin_z = min_z;
+    if slice_z + row_z + char_z < 0 { origin_z = max_z; }
+
     let mapping = LinkedHashMap::new();
     var next_index = 0;
     let data = JStringBuilder::new();
 
-    for z in min_z..max_z + 1 {
-        for y in min_y..max_y + 1 {
-            for x_inv in 0..size_x {
-                let x = max_x - x_inv;
-                let block = level.getBlockState(BlockPos::new(x, y, z)).getBlock();
-                let id = BuiltInRegistries::BLOCK.getKey(block as JObject).toString();
-                var letter = "";
-                if mapping.containsKey(id as JObject) {
-                    letter = mapping.get(id as JObject) as String;
+    for s in 0..slices {
+        for r in 0..rows {
+            for c in 0..chars {
+                let x = origin_x + s * slice_x + r * row_x + c * char_x;
+                let y = origin_y + s * slice_y + r * row_y + c * char_y;
+                let z = origin_z + s * slice_z + r * row_z + c * char_z;
+                if has_controller && x == controller.getX() && y == controller.getY() && z == controller.getZ() {
+                    data.append("=");
                 } else {
-                    if next_index >= ALPHABET.length() {
-                        return "";
+                    let block = level.getBlockState(BlockPos::new(x, y, z)).getBlock();
+                    let id = BuiltInRegistries::BLOCK.getKey(block as JObject).toString();
+                    var letter = "";
+                    if mapping.containsKey(id as JObject) {
+                        letter = mapping.get(id as JObject) as String;
+                    } else {
+                        if next_index >= ALPHABET.length() {
+                            return "";
+                        }
+                        letter = ALPHABET.substring(next_index, next_index + 1);
+                        mapping.put(id as JObject, letter as JObject);
+                        next_index = next_index + 1;
                     }
-                    letter = ALPHABET.substring(next_index, next_index + 1);
-                    mapping.put(id as JObject, letter as JObject);
-                    next_index = next_index + 1;
+                    data.append(letter);
                 }
-                data.append(letter);
             }
         }
     }
@@ -83,11 +126,12 @@ pub fn scan_region(level: &Level, pos1: &BlockPos, pos2: &BlockPos) -> String {
     }
 
     let out = JStringBuilder::new();
-    out.append(JStr::valueOf(size_x));
+    out.append("v2 ");
+    out.append(JStr::valueOf(slices));
     out.append(" ");
-    out.append(JStr::valueOf(size_z));
+    out.append(JStr::valueOf(rows));
     out.append(" ");
-    out.append(JStr::valueOf(size_y));
+    out.append(JStr::valueOf(chars));
     out.append("\n");
     out.append(mapping_lines.toString());
     out.append("\n");
@@ -95,18 +139,27 @@ pub fn scan_region(level: &Level, pos1: &BlockPos, pos2: &BlockPos) -> String {
     return out.toString();
 }
 
-// Scans the selection and sends it to the player; clears both corners when it worked.
-fn copy_selection(level: &Level, player: &Player, stack: &ItemStack, pos1: &BlockPos, pos2: &BlockPos) {
-    let data = scan_region(level, pos1, pos2);
+// Scans the selection and sends it to the player; clears the tool when it worked. `has_controller` says whether `controller` is real.
+fn copy_selection(level: &Level, player: &Player, stack: &ItemStack, pos1: &BlockPos, pos2: &BlockPos, has_controller: Bool, controller: &BlockPos) {
+    var frame = ControllerFrame::defaultFrame();
+    if has_controller {
+        frame = ControllerFrame::frame(level, controller);
+    }
+    let data = scan_region(level, pos1, pos2, &frame, has_controller, controller);
     if data == "" {
         message(player, "Too many different blocks in the selection (the limit is 91).");
     } else if data.length() > MAX_DATA_CHARS {
         message(player, "The selection is too big to send to you (about a million blocks at most).");
     } else {
         ClipboardSender::send(player, data);
-        message(player, "Copied blocks.");
+        if has_controller {
+            message(player, "Copied blocks, turned to face the controller.");
+        } else {
+            message(player, "Copied blocks.");
+        }
         CopyToolData::clear(stack, 1);
         CopyToolData::clear(stack, 2);
+        CopyToolData::clear(stack, 3);
     }
 }
 
@@ -118,7 +171,18 @@ pub fn use_item(level: &Level, player: &Player, hand: InteractionHand) -> Intera
         let pos2 = CopyToolData::get(&stack, 2);
         if pos1 != null {
             if pos2 != null {
-                copy_selection(level, player, &stack, &pos1, &pos2);
+                let low = BlockPos::new(JMath::min(pos1.getX(), pos2.getX()), JMath::min(pos1.getY(), pos2.getY()), JMath::min(pos1.getZ(), pos2.getZ()));
+                let high = BlockPos::new(JMath::max(pos1.getX(), pos2.getX()), JMath::max(pos1.getY(), pos2.getY()), JMath::max(pos1.getZ(), pos2.getZ()));
+                let controller = CopyToolData::get(&stack, 3);
+                if controller != null {
+                    if inside(&controller, &low, &high) {
+                        copy_selection(level, player, &stack, &pos1, &pos2, true, &controller);
+                    } else {
+                        message(player, "The marked controller is outside the selection.");
+                    }
+                } else {
+                    copy_selection(level, player, &stack, &pos1, &pos2, false, &pos1);
+                }
             } else {
                 message(player, "Set both corners first.");
             }
@@ -133,13 +197,25 @@ pub fn use_item(level: &Level, player: &Player, hand: InteractionHand) -> Intera
 pub fn use_on(context: &UseOnContext, player: &Player) -> InteractionResult {
     let stack = context.getItemInHand();
     let pos = context.getClickedPos();
+    let server = !context.getLevel().isClientSide;
+
+    if CopyToolData::controllerMode(&stack) {
+        if context.isSecondaryUseActive() {
+            CopyToolData::clear(&stack, 3);
+            if server { message(player, "Controller unmarked."); }
+        } else {
+            CopyToolData::set(&stack, 3, &pos);
+            if server { message(player, "Controller marked!"); }
+        }
+        return InteractionResult::SUCCESS;
+    }
+
     var corner = 2;
     if context.isSecondaryUseActive() {
         corner = 1;
     }
     CopyToolData::set(&stack, corner, &pos);
-
-    if !context.getLevel().isClientSide {
+    if server {
         message(player, "Corner {corner} set!");
     }
     return InteractionResult::SUCCESS;

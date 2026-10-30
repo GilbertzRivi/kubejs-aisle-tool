@@ -1,6 +1,8 @@
 package net.oktawia.structuretokubejsaisles;
 
+import com.mojang.serialization.Codec;
 import net.minecraft.core.BlockPos;
+import net.minecraft.network.codec.ByteBufCodecs;
 import net.minecraft.core.component.DataComponentType;
 import net.minecraft.core.registries.Registries;
 import net.minecraft.network.chat.Component;
@@ -28,6 +30,16 @@ public final class ModContent {
     public static final DeferredHolder<DataComponentType<?>, DataComponentType<BlockPos>> POS2 =
             COMPONENTS.registerComponentType("pos2",
                     b -> b.persistent(BlockPos.CODEC).networkSynchronized(BlockPos.STREAM_CODEC));
+
+    /** The marked multiblock controller. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<BlockPos>> CONTROLLER =
+            COMPONENTS.registerComponentType("controller",
+                    b -> b.persistent(BlockPos.CODEC).networkSynchronized(BlockPos.STREAM_CODEC));
+
+    /** Present (true) while right-clicking a block marks the controller instead of a corner. */
+    public static final DeferredHolder<DataComponentType<?>, DataComponentType<Boolean>> CONTROLLER_MODE =
+            COMPONENTS.registerComponentType("controller_mode",
+                    b -> b.persistent(Codec.BOOL).networkSynchronized(ByteBufCodecs.BOOL));
 
     public static final DeferredRegister.Items ITEMS = DeferredRegister.createItems(MOD_ID);
 

@@ -1,7 +1,56 @@
-// Client drawing: the info text above the hotbar and the selection box in the world.
+// Client drawing: the info text above the hotbar and the selection boxes in the world.
+
+// How many blocks the HUD will look through to count the distinct block types (more than this shows "many").
+static HUD_SCAN_LIMIT: Int = 100000;
+
+// The distinct-block count is recomputed at most once a second, and whenever the selection changes.
+static hud_key: String = "";
+static hud_time: Long = 0L;
+static hud_count: Int = 0;
 
 fn holding_copy_tool(player: &LocalPlayer) -> Bool {
     return player.getMainHandItem().getItem() is CopyToolItem;
+}
+
+// Counts the distinct block types between the corners in the client's loaded world, or -1 when there are too many blocks to look at.
+fn count_distinct(level: &ClientLevel, p1: &BlockPos, p2: &BlockPos) -> Int {
+    let min_x = JMath::min(p1.getX(), p2.getX());
+    let min_y = JMath::min(p1.getY(), p2.getY());
+    let min_z = JMath::min(p1.getZ(), p2.getZ());
+    let size_x = JMath::max(p1.getX(), p2.getX()) - min_x + 1;
+    let size_y = JMath::max(p1.getY(), p2.getY()) - min_y + 1;
+    let size_z = JMath::max(p1.getZ(), p2.getZ()) - min_z + 1;
+    if size_x * size_y * size_z > HUD_SCAN_LIMIT {
+        return -1;
+    }
+    let seen = LinkedHashMap::new();
+    for x in min_x..min_x + size_x {
+        for y in min_y..min_y + size_y {
+            for z in min_z..min_z + size_z {
+                let block = level.getBlockState(BlockPos::new(x, y, z)).getBlock();
+                seen.put(block as JObject, block as JObject);
+            }
+        }
+    }
+    return seen.size();
+}
+
+fn distinct_text(mc: &Minecraft, p1: &BlockPos, p2: &BlockPos) -> String {
+    let level = mc.level;
+    if level == null {
+        return "?";
+    }
+    let key = "{p1.getX()},{p1.getY()},{p1.getZ()},{p2.getX()},{p2.getY()},{p2.getZ()}";
+    let now = JSystem::currentTimeMillis();
+    if key != hud_key || now - hud_time > 1000L {
+        hud_key = key;
+        hud_time = now;
+        hud_count = count_distinct(&level, p1, p2);
+    }
+    if hud_count < 0 {
+        return "many";
+    }
+    return "{hud_count}";
 }
 
 pub fn render_hud(gg: GuiGraphics) {
@@ -17,21 +66,27 @@ pub fn render_hud(gg: GuiGraphics) {
     let stack = player.getMainHandItem();
     let p1 = CopyToolData::get(&stack, 1);
     let p2 = CopyToolData::get(&stack, 2);
+    let controller = CopyToolData::get(&stack, 3);
+    let controller_mode = CopyToolData::controllerMode(&stack);
 
     let screen_w = mc.getWindow().getGuiScaledWidth();
     let screen_h = mc.getWindow().getGuiScaledHeight();
     let x = screen_w / 2 - 90;
-    let y = screen_h - 60;
+    var y = screen_h - 82;
 
-    var any_corner = false;
-    if p1 != null { any_corner = true; }
-    if p2 != null { any_corner = true; }
-    if !any_corner {
-        let line1 = "Copy Tool: set the corners";
-        let line2 = "(Sneak + Right Click = Corner 1)";
-        let center_x = screen_w / 2;
-        gg.drawString(mc.font, line1, center_x - mc.font.width(line1) / 2, y, 0xFFFFFF, true);
-        gg.drawString(mc.font, line2, center_x - mc.font.width(line2) / 2, y + 10, 0xAAAAAA, true);
+    var mode_text = "Mode: corners  ([ to mark the controller)";
+    if controller_mode {
+        mode_text = "Mode: CONTROLLER  ([ for corners, sneak + click unmarks)";
+    }
+    gg.drawString(mc.font, mode_text, x, y, 0xFFAA00, true);
+    y = y + 12;
+
+    var any_marked = false;
+    if p1 != null { any_marked = true; }
+    if p2 != null { any_marked = true; }
+    if controller != null { any_marked = true; }
+    if !any_marked {
+        gg.drawString(mc.font, "Sneak + Right Click = Corner 1, Right Click = Corner 2", x, y, 0xAAAAAA, true);
         return;
     }
 
@@ -43,8 +98,13 @@ pub fn render_hud(gg: GuiGraphics) {
     if p2 != null {
         c2 = "Corner 2: {p2.getX()} {p2.getY()} {p2.getZ()}";
     }
+    var c3 = "Controller: - (optional)";
+    if controller != null {
+        c3 = "Controller: {controller.getX()} {controller.getY()} {controller.getZ()}";
+    }
     gg.drawString(mc.font, c1, x, y, 0xFFFFFF, true);
     gg.drawString(mc.font, c2, x, y + 10, 0xFFFFFF, true);
+    gg.drawString(mc.font, c3, x, y + 20, 0xFFAA55, true);
 
     if p1 != null {
         if p2 != null {
@@ -52,12 +112,14 @@ pub fn render_hud(gg: GuiGraphics) {
             let size_y = JMath::max(p1.getY(), p2.getY()) - JMath::min(p1.getY(), p2.getY()) + 1;
             let size_z = JMath::max(p1.getZ(), p2.getZ()) - JMath::min(p1.getZ(), p2.getZ()) + 1;
             let blocks = (size_x as Long) * (size_y as Long) * (size_z as Long);
-            gg.drawString(mc.font, "Size: {size_x}x{size_y}x{size_z}   Blocks: {blocks}", x, y + 22, 0xFFFFFF, true);
+            let distinct = distinct_text(&mc, &p1, &p2);
+            gg.drawString(mc.font, "Size: {size_x}x{size_y}x{size_z}   Blocks: {blocks}   Types: {distinct} / 91", x, y + 32, 0xFFFFFF, true);
         }
     }
 }
 
-fn draw_selection_box(pose: &PoseStack, min: &BlockPos, max_exclusive: &BlockPos) {
+// One box outline. With `through_walls` the depth test is off, so it shows behind blocks too (drawn dimmer by the caller).
+fn draw_box(pose: &PoseStack, min: &BlockPos, max_exclusive: &BlockPos, r: Float, g: Float, b: Float, a: Float, through_walls: Bool) {
     let mc = Minecraft::getInstance();
     let cam = mc.gameRenderer.getMainCamera().getPosition();
 
@@ -67,9 +129,21 @@ fn draw_selection_box(pose: &PoseStack, min: &BlockPos, max_exclusive: &BlockPos
     ).move(0.0 - cam.x, 0.0 - cam.y, 0.0 - cam.z);
 
     let source = mc.renderBuffers().bufferSource();
+    if through_walls {
+        RenderSystem::disableDepthTest();
+    }
     let buffer = source.getBuffer(RenderType::lines());
-    LevelRenderer::renderLineBox(pose, &buffer, &box, 0.0f, 1.0f, 0.0f, 1.0f);
+    LevelRenderer::renderLineBox(pose, &buffer, &box, r, g, b, a);
     source.endBatch(RenderType::lines());
+    if through_walls {
+        RenderSystem::enableDepthTest();
+    }
+}
+
+// A box as it is seen normally and, fainter, through the blocks in front of it.
+fn draw_selection_box(pose: &PoseStack, min: &BlockPos, max_exclusive: &BlockPos, r: Float, g: Float, b: Float) {
+    draw_box(pose, min, max_exclusive, r, g, b, 0.3f, true);
+    draw_box(pose, min, max_exclusive, r, g, b, 1.0f, false);
 }
 
 pub fn render_selection(pose: PoseStack) {
@@ -85,16 +159,21 @@ pub fn render_selection(pose: PoseStack) {
     let stack = player.getMainHandItem();
     let p1 = CopyToolData::get(&stack, 1);
     let p2 = CopyToolData::get(&stack, 2);
+    let controller = CopyToolData::get(&stack, 3);
 
     if p1 != null {
         if p2 != null {
             let low = BlockPos::new(JMath::min(p1.getX(), p2.getX()), JMath::min(p1.getY(), p2.getY()), JMath::min(p1.getZ(), p2.getZ()));
             let high = BlockPos::new(JMath::max(p1.getX(), p2.getX()), JMath::max(p1.getY(), p2.getY()), JMath::max(p1.getZ(), p2.getZ()));
-            draw_selection_box(&pose, &low, &high.offset(1, 1, 1));
+            draw_selection_box(&pose, &low, &high.offset(1, 1, 1), 0.0f, 1.0f, 0.0f);
         } else {
-            draw_selection_box(&pose, &p1, &p1.offset(1, 1, 1));
+            draw_selection_box(&pose, &p1, &p1.offset(1, 1, 1), 0.0f, 1.0f, 0.0f);
         }
     } else if p2 != null {
-        draw_selection_box(&pose, &p2, &p2.offset(1, 1, 1));
+        draw_selection_box(&pose, &p2, &p2.offset(1, 1, 1), 0.0f, 1.0f, 0.0f);
+    }
+
+    if controller != null {
+        draw_selection_box(&pose, &controller, &controller.offset(1, 1, 1), 1.0f, 0.5f, 0.0f);
     }
 }
